@@ -5,7 +5,7 @@ import WelcomeScreen from './components/WelcomeScreen';
 import ChatMessage from './components/ChatMessage';
 import OnboardingTour from './components/OnboardingTour';
 import { streamChatResponse } from './services/geminiService';
-import { fetchConversations, fetchConversationDetail, runThinkingMode, runPlanningMode, fetchModelTypes, fetchAppsUsage, fetchExploreApps, ApiError, deleteConversation, renameConversation, uploadFile } from './services/apiService';
+import { fetchConversations, fetchConversationDetail, runThinkingMode, runPlanningMode, fetchModelTypes, fetchAppsUsage, fetchExploreApps, fetchSkills, ApiError, deleteConversation, renameConversation, uploadFile } from './services/apiService';
 import { Message, Role, HistoryItem, AppShortcut } from './types';
 import { Icons, INPUT_CHIPS } from './constants';
 
@@ -32,16 +32,25 @@ const AppContent: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [agentMode, setAgentMode] = useState<'single' | 'multi'>('single');
   const [uploadedFiles, setUploadedFiles] = useState<{id: string, name: string}[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState('document_knowledge');
+  const [selectedAgent, setSelectedAgent] = useState('知识库专家');
   const [modelTypes, setModelTypes] = useState<any[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   
   // App Mention State
   const [showAppMention, setShowAppMention] = useState(false);
   const [showAgentMention, setShowAgentMention] = useState(false);
+  const [showSkillMention, setShowSkillMention] = useState(false);
   const [exploreApps, setExploreApps] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [skillsPage, setSkillsPage] = useState(1);
+  const [hasMoreSkills, setHasMoreSkills] = useState(true);
+  const [isLoadingSkills, setIsLoadingSkills] = useState(false);
+  const isLoadingSkillsRef = useRef(false);
   const [mentionFilter, setMentionFilter] = useState('');
   const [agentMentionFilter, setAgentMentionFilter] = useState('');
+  const [skillMentionFilter, setSkillMentionFilter] = useState('');
+  const [hoveredSkill, setHoveredSkill] = useState<any | null>(null);
+  const skillHoverTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [mentionPosition, setMentionPosition] = useState<'top' | 'bottom'>('top');
   const [mentionCursorPos, setMentionCursorPos] = useState<number>(0);
   
@@ -71,6 +80,13 @@ const AppContent: React.FC = () => {
   // Voice Input State
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const shouldListenRef = useRef(false);
+  const baseTextRef = useRef('');
+  const currentInputTextRef = useRef(inputText);
+
+  useEffect(() => {
+    currentInputTextRef.current = inputText;
+  }, [inputText]);
 
   // Features State (Style & Templates)
   const [activePopup, setActivePopup] = useState<'style' | 'template' | 'model' | 'agent' | null>(null);
@@ -96,6 +112,7 @@ const AppContent: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionDropdownRef = useRef<HTMLDivElement>(null);
   const agentMentionDropdownRef = useRef<HTMLDivElement>(null);
+  const skillMentionDropdownRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   // Click outside to close mention dropdown
@@ -115,13 +132,20 @@ const AppContent: React.FC = () => {
       ) {
         setShowAgentMention(false);
       }
+      if (
+        showSkillMention &&
+        skillMentionDropdownRef.current &&
+        !skillMentionDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowSkillMention(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showAppMention, showAgentMention]);
+  }, [showAppMention, showAgentMention, showSkillMention]);
 
   const isWelcomeMode = messages.length === 0;
 
@@ -157,6 +181,43 @@ const AppContent: React.FC = () => {
   const handleLoadMoreHistory = () => {
     if (hasMoreHistory && !isLoadingHistoryRef.current) {
       loadConversations(historyPage + 1);
+    }
+  };
+
+  const loadSkills = async (page: number = 1) => {
+    if (isLoadingSkillsRef.current || (!hasMoreSkills && page > 1)) return;
+    
+    setIsLoadingSkills(true);
+    isLoadingSkillsRef.current = true;
+    try {
+      const response: any = await fetchSkills(page, 50);
+      const items = response.data?.list || [];
+      const total = response.data?.total || 0;
+      
+      if (page === 1) {
+        setSkills(items);
+      } else {
+        setSkills(prev => [...prev, ...items]);
+      }
+      
+      setHasMoreSkills(items.length === 50 && (page * 50) < total);
+      setSkillsPage(page);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setShowTokenPrompt(true);
+      } else {
+        console.error("Failed to load skills:", error);
+      }
+    } finally {
+      setIsLoadingSkills(false);
+      isLoadingSkillsRef.current = false;
+    }
+  };
+
+  const handleSkillsScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 50 && hasMoreSkills && !isLoadingSkillsRef.current) {
+      loadSkills(skillsPage + 1);
     }
   };
 
@@ -233,6 +294,7 @@ const AppContent: React.FC = () => {
     loadConversations();
     loadRecentApps();
     loadExploreApps();
+    loadSkills();
   }, []);
 
   const handleTokenSubmit = (token: string) => {
@@ -317,7 +379,8 @@ const AppContent: React.FC = () => {
   }, []);
 
   const handleVoiceInput = () => {
-    if (isListening) {
+    if (isListening || shouldListenRef.current) {
+      shouldListenRef.current = false;
       recognitionRef.current?.stop();
       setIsListening(false);
       return;
@@ -329,28 +392,51 @@ const AppContent: React.FC = () => {
     }
 
     try {
+      shouldListenRef.current = true;
+      baseTextRef.current = currentInputTextRef.current;
+      
       recognitionRef.current.onstart = () => setIsListening(true);
-      recognitionRef.current.onend = () => setIsListening(false);
+      
+      recognitionRef.current.onend = () => {
+        if (shouldListenRef.current) {
+          // Auto-restart if it ended but we didn't explicitly stop it
+          baseTextRef.current = currentInputTextRef.current; 
+          try {
+            recognitionRef.current?.start();
+          } catch(e) {
+            shouldListenRef.current = false;
+            setIsListening(false);
+          }
+        } else {
+          setIsListening(false);
+        }
+      };
+      
       recognitionRef.current.onerror = (event: any) => {
         console.error("Speech recognition error", event.error);
-        setIsListening(false);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+           shouldListenRef.current = false;
+        }
       };
 
       recognitionRef.current.onresult = (event: any) => {
         let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        let interimTranscript = '';
+        for (let i = 0; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
             finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
           }
         }
-        if (finalTranscript) {
-           setInputText(prev => prev + finalTranscript);
-        }
+        
+        setInputText(baseTextRef.current + finalTranscript + interimTranscript);
       };
 
       recognitionRef.current.start();
     } catch (e) {
       console.error("Failed to start speech recognition:", e);
+      shouldListenRef.current = false;
       setIsListening(false);
     }
   };
@@ -394,7 +480,7 @@ const AppContent: React.FC = () => {
       if (agentMode === 'single') {
         response = await runThinkingMode(finalPrompt, selectedAgent, modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId);
       } else {
-        response = await runPlanningMode(finalPrompt, ["manus", "document_knowledge", "sql_query"], modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId);
+        response = await runPlanningMode(finalPrompt, ["综合专家", "知识库专家", "数据库专家"], modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId);
       }
 
       const reader = response.body.getReader();
@@ -562,7 +648,8 @@ const AppContent: React.FC = () => {
     if ((!inputText.trim() && uploadedFiles.length === 0) || isStreaming) return;
     
     // Stop listening if sending
-    if (isListening) {
+    if (isListening || shouldListenRef.current) {
+      shouldListenRef.current = false;
       recognitionRef.current?.stop();
       setIsListening(false);
     }
@@ -674,11 +761,29 @@ const AppContent: React.FC = () => {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (isListening || shouldListenRef.current) {
+      shouldListenRef.current = false;
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
+
     const value = e.target.value;
     const cursorPosition = e.target.selectionStart;
     setInputText(value);
 
     const textBeforeCursor = value.slice(0, cursorPosition);
+
+    // Check for / mention for skills
+    const slashMatch = textBeforeCursor.match(/\/([^\/\s]*)$/);
+    if (slashMatch) {
+      const filterText = slashMatch[1];
+      setSkillMentionFilter(filterText);
+      setShowSkillMention(true);
+      setShowAppMention(false);
+      setShowAgentMention(false);
+      setMentionCursorPos(cursorPosition);
+      return;
+    }
 
     // Check for # mention
     const hashMatch = textBeforeCursor.match(/#([^#\s]*)$/);
@@ -692,18 +797,21 @@ const AppContent: React.FC = () => {
     }
 
     // Check for @ mention
-    const atMatch = textBeforeCursor.match(/@([^@\s]*)$/);
-    if (atMatch) {
-      const filterText = atMatch[1];
-      setAgentMentionFilter(filterText);
-      setShowAgentMention(true);
-      setShowAppMention(false);
-      setMentionCursorPos(cursorPosition);
-      return;
+    if (agentMode !== 'single') {
+      const atMatch = textBeforeCursor.match(/@([^@\s]*)$/);
+      if (atMatch) {
+        const filterText = atMatch[1];
+        setAgentMentionFilter(filterText);
+        setShowAgentMention(true);
+        setShowAppMention(false);
+        setMentionCursorPos(cursorPosition);
+        return;
+      }
     }
 
     setShowAppMention(false);
     setShowAgentMention(false);
+    setShowSkillMention(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -712,6 +820,9 @@ const AppContent: React.FC = () => {
     }
     if (showAgentMention && e.key === 'Escape') {
       setShowAgentMention(false);
+    }
+    if (showSkillMention && e.key === 'Escape') {
+      setShowSkillMention(false);
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -806,6 +917,20 @@ const AppContent: React.FC = () => {
     const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
     if (lastAtSymbol !== -1) {
       const newInputText = textBeforeCursor.slice(0, lastAtSymbol) + `@${agent.name} ` + textAfterCursor;
+      setInputText(newInputText);
+    }
+  };
+
+  const handleSkillMentionSelect = (skill: any) => {
+    setShowSkillMention(false);
+    
+    const textBeforeCursor = inputText.slice(0, mentionCursorPos);
+    const textAfterCursor = inputText.slice(mentionCursorPos);
+    
+    // Replace the /... from input with /SkillName
+    const lastSlashSymbol = textBeforeCursor.lastIndexOf('/');
+    if (lastSlashSymbol !== -1) {
+      const newInputText = textBeforeCursor.slice(0, lastSlashSymbol) + `/${skill.name} ` + textAfterCursor;
       setInputText(newInputText);
     }
   };
@@ -1195,9 +1320,9 @@ const AppContent: React.FC = () => {
                    <div className="flex-shrink-0 text-xs font-semibold text-gray-400 px-4 py-2 border-b border-gray-50 bg-white rounded-t-xl">选择智能体</div>
                    <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
                      {[
-                       { id: 'document_knowledge', name: '知识智能', icon: <Icons.FileText /> },
-                       { id: 'manus', name: '通用智能', icon: <Icons.Sparkles /> },
-                       { id: 'sql_query', name: '数据智能', icon: <Icons.Database /> }
+                       { id: '知识库专家', name: '知识库专家', icon: <Icons.FileText /> },
+                       { id: '综合专家', name: '综合专家', icon: <Icons.Sparkles /> },
+                       { id: '数据库专家', name: '数据库专家', icon: <Icons.Database /> }
                      ]
                        .filter(agent => agent.name.toLowerCase().includes(agentMentionFilter.toLowerCase()))
                        .map((agent) => (
@@ -1213,16 +1338,87 @@ const AppContent: React.FC = () => {
                          </button>
                        ))}
                      {[
-                       { id: 'document_knowledge', name: '知识智能', icon: <Icons.FileText /> },
-                       { id: 'manus', name: '通用智能', icon: <Icons.Sparkles /> },
-                       { id: 'sql_query', name: '数据智能', icon: <Icons.Database /> }
+                       { id: '知识库专家', name: '知识库专家', icon: <Icons.FileText /> },
+                       { id: '综合专家', name: '综合专家', icon: <Icons.Sparkles /> },
+                       { id: '数据库专家', name: '数据库专家', icon: <Icons.Database /> }
                      ].filter(agent => agent.name.toLowerCase().includes(agentMentionFilter.toLowerCase())).length === 0 && (
                        <div className="px-3 py-2 text-sm text-gray-400 text-center">没有找到匹配的智能体</div>
                      )}
                    </div>
                  </div>
                )}
-               {uploadedFiles.length > 0 && (
+                {showSkillMention && (
+                  <div ref={skillMentionDropdownRef} className={`absolute left-4 bg-white rounded-xl shadow-2xl border border-gray-100 w-64 max-h-64 flex flex-col z-50 ${mentionPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}`}>
+                    <div className="flex-shrink-0 text-xs font-semibold text-gray-400 px-4 py-2 border-b border-gray-50 bg-white rounded-t-xl flex justify-between items-center">
+                      <span>选择技能</span>
+                      {isLoadingSkills && <Icons.Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
+                    </div>
+                    <div 
+                      className="overflow-y-auto custom-scrollbar p-1 flex-1 relative"
+                      onScroll={handleSkillsScroll}
+                    >
+                      {skills
+                        .filter(skill => skill.name.toLowerCase().includes(skillMentionFilter.toLowerCase()))
+                        .map((skill) => (
+                          <button
+                            key={skill.id}
+                            onClick={() => handleSkillMentionSelect(skill)}
+                            onMouseEnter={() => {
+                              if (skillHoverTimerRef.current) clearTimeout(skillHoverTimerRef.current);
+                              setHoveredSkill(skill);
+                            }}
+                            onMouseLeave={() => {
+                              skillHoverTimerRef.current = setTimeout(() => {
+                                setHoveredSkill(null);
+                              }, 150);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm rounded-lg flex flex-col transition-all hover:bg-gray-50 text-gray-700 group relative"
+                          >
+                            <div className="flex items-center space-x-2 w-full">
+                              <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-green-500">
+                                <Icons.Code />
+                              </span>
+                              <span className="font-medium truncate">{skill.name}</span>
+                            </div>
+                            {skill.description && (
+                              <span className="text-xs text-gray-400 mt-1 truncate w-full pl-6">{skill.description}</span>
+                            )}
+                          </button>
+                        ))}
+                      {skills.filter(skill => skill.name.toLowerCase().includes(skillMentionFilter.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-400 text-center">没有找到匹配的技能</div>
+                      )}
+                    </div>
+                    
+                    {/* Modern Custom Tooltip */}
+                    {hoveredSkill && hoveredSkill.description && (
+                      <div 
+                        className="absolute left-full ml-3 top-0 w-72 bg-gray-900/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-white/10 z-[60] animate-in fade-in slide-in-from-left-2 duration-200 ring-1 ring-black/5"
+                        onMouseEnter={() => {
+                          if (skillHoverTimerRef.current) clearTimeout(skillHoverTimerRef.current);
+                        }}
+                        onMouseLeave={() => {
+                          skillHoverTimerRef.current = setTimeout(() => {
+                            setHoveredSkill(null);
+                          }, 150);
+                        }}
+                      >
+                        <div className="flex items-center space-x-2.5 mb-3 pb-2.5 border-b border-white/10">
+                          <div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center ring-1 ring-green-500/30">
+                            <Icons.Code className="w-4 h-4 text-green-400" />
+                          </div>
+                          <span className="font-bold text-sm tracking-tight text-white/95">{hoveredSkill.name}</span>
+                        </div>
+                        <div className="text-xs leading-relaxed text-gray-300 font-normal">
+                          {hoveredSkill.description}
+                        </div>
+                        {/* Arrow */}
+                        <div className="absolute left-0 top-6 -ml-1.5 w-3 h-3 bg-gray-900/95 border-l border-b border-white/10 rotate-45"></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {uploadedFiles.length > 0 && (
                  <div className="flex flex-wrap gap-2 mb-2">
                    {uploadedFiles.map(file => (
                      <div key={file.id} className="flex items-center space-x-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs border border-blue-100">
@@ -1240,7 +1436,7 @@ const AppContent: React.FC = () => {
                   value={inputText}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
-                  placeholder={isListening ? "正在聆听..." : "输入您的问题，或输入@选择智能体，#选择技能..."}
+                  placeholder={isListening ? "正在聆听..." : (agentMode === 'single' ? "输入您的问题，或输入/选择技能，#选择应用..." : "输入您的问题，或输入@选择智能体，/选择技能，#选择应用...")}
                   className={`
                      w-full focus:outline-none resize-none bg-transparent custom-scrollbar text-gray-700
                      ${isWelcomeMode ? 'text-base min-h-[56px]' : 'text-sm min-h-[44px] max-h-32'}
@@ -1339,9 +1535,7 @@ const AppContent: React.FC = () => {
                                         className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition-all hover:bg-gray-50 group ${activePopup === 'agent' ? 'text-blue-600 bg-blue-50/50' : 'text-gray-700'}`}
                                     >
                                         <span className="font-semibold">
-                                            {selectedAgent === 'document_knowledge' ? '知识智能' : 
-                                             selectedAgent === 'manus' ? '通用智能' : 
-                                             selectedAgent === 'sql_query' ? '数据智能' : selectedAgent}
+                                            {selectedAgent}
                                         </span>
                                         <Icons.ChevronDown className={`w-3 h-3 transition-transform duration-200 ${activePopup === 'agent' ? 'rotate-180 text-blue-500' : 'text-gray-400 group-hover:text-gray-600'}`} />
                                     </button>
@@ -1353,9 +1547,9 @@ const AppContent: React.FC = () => {
                                         >
                                             <div className="text-xs font-semibold text-gray-400 px-3 py-2 border-b border-gray-50 mb-1">选择智能体</div>
                                             {[
-                                                { id: 'document_knowledge', name: '知识智能', icon: <Icons.FileText /> },
-                                                { id: 'manus', name: '通用智能', icon: <Icons.Sparkles /> },
-                                                { id: 'sql_query', name: '数据智能', icon: <Icons.Database /> }
+                                                { id: '知识库专家', name: '知识库专家', icon: <Icons.FileText /> },
+                                                { id: '综合专家', name: '综合专家', icon: <Icons.Sparkles /> },
+                                                { id: '数据库专家', name: '数据库专家', icon: <Icons.Database /> }
                                             ].map(agent => (
                                                 <button
                                                     key={agent.id}

@@ -18,6 +18,22 @@ const getHeaders = () => {
   };
 };
 
+export const fetchSkills = async (page: number = 1, limit: number = 100): Promise<any> => {
+  const response = await fetch(`${BASE_URL}/console/api/skills/list?page=${page}&limit=${limit}`, {
+    headers: getHeaders()
+  });
+
+  if (response.status === 401) {
+    throw new ApiError('Unauthorized', 401);
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch skills');
+  }
+
+  return response.json();
+};
+
 export const fetchConversations = async (page: number = 1, per_page: number = 20): Promise<ConversationApiResponse> => {
   const response = await fetch(`${BASE_URL}/console/api/manus/conversations?page=${page}&per_page=${per_page}`, {
     headers: getHeaders()

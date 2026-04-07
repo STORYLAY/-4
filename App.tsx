@@ -81,7 +81,7 @@ const AppContent: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false);
-  const baseTextRef = useRef('');
+  const baseTextRef = useRef(''); // Text before the current session started
   const currentInputTextRef = useRef(inputText);
 
   useEffect(() => {
@@ -374,6 +374,64 @@ const AppContent: React.FC = () => {
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'zh-CN';
+      recognition.maxAlternatives = 1;
+      
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let sessionTranscript = '';
+        
+        for (let i = 0; i < event.results.length; ++i) {
+          sessionTranscript += event.results[i][0].transcript;
+        }
+        
+        // Update UI: Base (previous sessions) + Current Session Transcript
+        const newText = baseTextRef.current + sessionTranscript;
+        setInputText(newText);
+        currentInputTextRef.current = newText;
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        
+        // Ignore 'no-speech' as it's common during pauses and we want to keep listening
+        if (event.error === 'no-speech') return;
+        
+        if (['not-allowed', 'service-not-allowed', 'network', 'audio-capture'].includes(event.error)) {
+          shouldListenRef.current = false;
+          setIsListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        if (shouldListenRef.current) {
+          // CRITICAL: When restarting, commit whatever we had so far as the new base
+          // This prevents losing interim results if the session ends prematurely
+          baseTextRef.current = currentInputTextRef.current;
+          
+          // Use a small timeout to allow the browser to fully clean up the previous session
+          setTimeout(() => {
+            if (shouldListenRef.current) {
+              try {
+                recognition.start();
+              } catch(e: any) {
+                // If it's already started or in a transition state, we can ignore the error
+                if (e.name !== 'InvalidStateError') {
+                  console.error("Failed to restart speech recognition:", e);
+                  setIsListening(false);
+                  shouldListenRef.current = false;
+                }
+              }
+            }
+          }, 100);
+        } else {
+          setIsListening(false);
+          baseTextRef.current = '';
+        }
+      };
+
       recognitionRef.current = recognition;
     }
   }, []);
@@ -382,7 +440,6 @@ const AppContent: React.FC = () => {
     if (isListening || shouldListenRef.current) {
       shouldListenRef.current = false;
       recognitionRef.current?.stop();
-      setIsListening(false);
       return;
     }
 
@@ -393,51 +450,17 @@ const AppContent: React.FC = () => {
 
     try {
       shouldListenRef.current = true;
-      baseTextRef.current = currentInputTextRef.current;
-      
-      recognitionRef.current.onstart = () => setIsListening(true);
-      
-      recognitionRef.current.onend = () => {
-        if (shouldListenRef.current) {
-          // Auto-restart if it ended but we didn't explicitly stop it
-          baseTextRef.current = currentInputTextRef.current; 
-          try {
-            recognitionRef.current?.start();
-          } catch(e) {
-            shouldListenRef.current = false;
-            setIsListening(false);
-          }
-        } else {
-          setIsListening(false);
-        }
-      };
-      
-      recognitionRef.current.onerror = (event: any) => {
-        console.error("Speech recognition error", event.error);
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-           shouldListenRef.current = false;
-        }
-      };
-
-      recognitionRef.current.onresult = (event: any) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-        for (let i = 0; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-        
-        setInputText(baseTextRef.current + finalTranscript + interimTranscript);
-      };
-
+      baseTextRef.current = inputText;
       recognitionRef.current.start();
-    } catch (e) {
-      console.error("Failed to start speech recognition:", e);
-      shouldListenRef.current = false;
-      setIsListening(false);
+    } catch (e: any) {
+      if (e.name === 'InvalidStateError') {
+        // If it's already running, we don't need to do anything
+        console.warn("Speech recognition already running");
+      } else {
+        console.error("Failed to start speech recognition:", e);
+        shouldListenRef.current = false;
+        setIsListening(false);
+      }
     }
   };
 

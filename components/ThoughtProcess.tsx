@@ -191,29 +191,22 @@ const ThoughtProcess: React.FC<ThoughtProcessProps> = ({ thought, logs, duration
                                 <div className="w-0.5 h-full bg-gray-100 mt-1 min-h-[8px]"></div>
                               )}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider px-1 rounded ${
-                                  step.status === 'completed' ? 'bg-green-50 text-green-600' : 
-                                  step.status === 'in_progress' ? 'bg-purple-50 text-purple-600' : 
-                                  'bg-gray-100 text-gray-500'
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <div className="flex items-center gap-2">
+                                <p className={`text-xs leading-relaxed ${
+                                  step.status === 'completed' ? 'text-gray-400' : 
+                                  step.status === 'in_progress' ? 'text-gray-700 font-medium' : 
+                                  'text-gray-500'
                                 }`}>
-                                  {step.agent_name || 'AGENT'}
-                                </span>
+                                  {step.text}
+                                </p>
                                 {step.status === 'in_progress' && (
-                                  <span className="flex h-1.5 w-1.5 relative">
+                                  <span className="flex h-1.5 w-1.5 relative flex-shrink-0">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-purple-500"></span>
                                   </span>
                                 )}
                               </div>
-                              <p className={`text-xs leading-relaxed ${
-                                step.status === 'completed' ? 'text-gray-400' : 
-                                step.status === 'in_progress' ? 'text-gray-700 font-medium' : 
-                                'text-gray-500'
-                              }`}>
-                                {step.text}
-                              </p>
                             </div>
                           </div>
                         ))}

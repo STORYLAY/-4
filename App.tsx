@@ -42,8 +42,7 @@ const AppContent: React.FC = () => {
   const [showSkillMention, setShowSkillMention] = useState(false);
   const [exploreApps, setExploreApps] = useState<any[]>([]);
   const [skills, setSkills] = useState<any[]>([]);
-  const [skillsPage, setSkillsPage] = useState(1);
-  const [hasMoreSkills, setHasMoreSkills] = useState(true);
+  const [selectedSkills, setSelectedSkills] = useState<any[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
   const isLoadingSkillsRef = useRef(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -184,24 +183,16 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const loadSkills = async (page: number = 1) => {
-    if (isLoadingSkillsRef.current || (!hasMoreSkills && page > 1)) return;
+  const loadSkills = async () => {
+    if (isLoadingSkillsRef.current) return;
     
     setIsLoadingSkills(true);
     isLoadingSkillsRef.current = true;
     try {
-      const response: any = await fetchSkills(page, 50);
-      const items = response.data?.list || [];
-      const total = response.data?.total || 0;
+      const response: any = await fetchSkills();
+      const items = response.data || [];
       
-      if (page === 1) {
-        setSkills(items);
-      } else {
-        setSkills(prev => [...prev, ...items]);
-      }
-      
-      setHasMoreSkills(items.length === 50 && (page * 50) < total);
-      setSkillsPage(page);
+      setSkills(items);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setShowTokenPrompt(true);
@@ -211,13 +202,6 @@ const AppContent: React.FC = () => {
     } finally {
       setIsLoadingSkills(false);
       isLoadingSkillsRef.current = false;
-    }
-  };
-
-  const handleSkillsScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 50 && hasMoreSkills && !isLoadingSkillsRef.current) {
-      loadSkills(skillsPage + 1);
     }
   };
 
@@ -499,11 +483,12 @@ const AppContent: React.FC = () => {
 
       let response;
       const fileIds = uploadedFiles.map(f => f.id);
+      const skillIds = selectedSkills.map(s => s.id);
       const apiConversationId = isLocalId ? undefined : currentActiveChatId;
       if (agentMode === 'single') {
-        response = await runThinkingMode(finalPrompt, selectedAgent, modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId);
+        response = await runThinkingMode(finalPrompt, selectedAgent, modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId, skillIds);
       } else {
-        response = await runPlanningMode(finalPrompt, ["综合专家", "知识库专家", "数据库专家"], modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId);
+        response = await runPlanningMode(finalPrompt, ["综合专家", "知识库专家", "数据库专家"], modelConfig, abortControllerRef.current.signal, fileIds, apiConversationId, skillIds);
       }
 
       const reader = response.body.getReader();
@@ -702,6 +687,7 @@ const AppContent: React.FC = () => {
     setMessages(newMessages);
     setInputText('');
     setUploadedFiles([]);
+    setSelectedSkills([]);
     setShowAppMention(false);
     setIsStreaming(true);
 
@@ -947,15 +933,23 @@ const AppContent: React.FC = () => {
   const handleSkillMentionSelect = (skill: any) => {
     setShowSkillMention(false);
     
+    if (!selectedSkills.find(s => s.id === skill.id)) {
+      setSelectedSkills(prev => [...prev, skill]);
+    }
+    
     const textBeforeCursor = inputText.slice(0, mentionCursorPos);
     const textAfterCursor = inputText.slice(mentionCursorPos);
     
-    // Replace the /... from input with /SkillName
+    // Remove the /... from input
     const lastSlashSymbol = textBeforeCursor.lastIndexOf('/');
     if (lastSlashSymbol !== -1) {
-      const newInputText = textBeforeCursor.slice(0, lastSlashSymbol) + `/${skill.name} ` + textAfterCursor;
+      const newInputText = textBeforeCursor.slice(0, lastSlashSymbol) + textAfterCursor;
       setInputText(newInputText);
     }
+  };
+
+  const handleRemoveSkill = (idToRemove: string) => {
+    setSelectedSkills(prev => prev.filter(s => s.id !== idToRemove));
   };
 
   const handleSuggestionClick = (text: string) => {
@@ -1120,7 +1114,7 @@ const AppContent: React.FC = () => {
     {
       targetId: 'tour-input',
       title: '智能交互中心',
-      description: '在此输入您的问题或指令。支持语音输入。输入“@”选择智能体，输入“#”快速调用技能。'
+      description: '在此输入您的问题或指令。支持语音输入。输入“@”选择智能体，输入“/”快速调用技能，输入“#”选择应用。'
     },
     {
       targetId: 'tour-cards',
@@ -1378,7 +1372,6 @@ const AppContent: React.FC = () => {
                     </div>
                     <div 
                       className="overflow-y-auto custom-scrollbar p-1 flex-1 relative"
-                      onScroll={handleSkillsScroll}
                     >
                       {skills
                         .filter(skill => skill.name.toLowerCase().includes(skillMentionFilter.toLowerCase()))
@@ -1441,13 +1434,22 @@ const AppContent: React.FC = () => {
                     )}
                   </div>
                 )}
-                {uploadedFiles.length > 0 && (
+                {(uploadedFiles.length > 0 || selectedSkills.length > 0) && (
                  <div className="flex flex-wrap gap-2 mb-2">
                    {uploadedFiles.map(file => (
                      <div key={file.id} className="flex items-center space-x-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs border border-blue-100">
                        <Icons.Paperclip className="w-3 h-3" />
                        <span className="truncate max-w-[150px]">{file.name}</span>
                        <button onClick={() => handleRemoveFile(file.id)} className="hover:text-blue-900 ml-1">
+                         <Icons.X className="w-3 h-3" />
+                       </button>
+                     </div>
+                   ))}
+                   {selectedSkills.map(skill => (
+                     <div key={skill.id} className="flex items-center space-x-1 bg-green-50 text-green-700 px-2 py-1 rounded-md text-xs border border-green-100">
+                       <Icons.Code className="w-3 h-3" />
+                       <span className="truncate max-w-[150px]">{skill.name}</span>
+                       <button onClick={() => handleRemoveSkill(skill.id)} className="hover:text-green-900 ml-1">
                          <Icons.X className="w-3 h-3" />
                        </button>
                      </div>

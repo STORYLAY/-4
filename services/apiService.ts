@@ -18,8 +18,8 @@ const getHeaders = () => {
   };
 };
 
-export const fetchSkills = async (page: number = 1, limit: number = 100): Promise<any> => {
-  const response = await fetch(`${BASE_URL}/console/api/skills/list?page=${page}&limit=${limit}`, {
+export const fetchSkills = async (): Promise<any> => {
+  const response = await fetch(`${BASE_URL}/console/api/skills/use`, {
     headers: getHeaders()
   });
 
@@ -101,12 +101,13 @@ export const fetchConversationDetail = async (id: string): Promise<ConversationD
   return response.json();
 };
 
-export const runThinkingMode = async (prompt: string, agentType: string, modelConfig: any, signal?: AbortSignal, fileIds?: string[], conversationId?: string): Promise<any> => {
+export const runThinkingMode = async (prompt: string, agentType: string, modelConfig: any, signal?: AbortSignal, fileIds?: string[], conversationId?: string, skillIds?: string[]): Promise<any> => {
   const body: any = {
       prompt,
       stream: true,
       agent_type: agentType,
       file_ids: fileIds || [],
+      skill_ids: skillIds || [],
       model_config: {
         ...modelConfig,
         max_tokens: 15000
@@ -132,13 +133,14 @@ export const runThinkingMode = async (prompt: string, agentType: string, modelCo
   return response; // Assuming stream response
 };
 
-export const runPlanningMode = async (prompt: string, agents: string[], modelConfig: any, signal?: AbortSignal, fileIds?: string[], conversationId?: string): Promise<any> => {
+export const runPlanningMode = async (prompt: string, agents: string[], modelConfig: any, signal?: AbortSignal, fileIds?: string[], conversationId?: string, skillIds?: string[]): Promise<any> => {
   const body: any = {
       prompt,
       stream: true,
       agents,
       timeout: 3600,
       file_ids: fileIds || [],
+      skill_ids: skillIds || [],
       model_config: {
         ...modelConfig,
         max_tokens: 15000

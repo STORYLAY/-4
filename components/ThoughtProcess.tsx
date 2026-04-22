@@ -3,7 +3,6 @@ import { Icons } from '../constants';
 import { LogEntry, Plan } from '../types';
 
 interface ThoughtProcessProps {
-  thought: string;
   logs: LogEntry[];
   duration: number;
   plan?: Plan;
@@ -12,6 +11,32 @@ interface ThoughtProcessProps {
 
 const CompactEventItem: React.FC<{ log: LogEntry }> = ({ log }) => {
   const [expanded, setExpanded] = useState(false);
+
+  if (log.type === 'thought') {
+    const cleanMessage = log.message.replace(/<\/?think>/g, '').trim();
+    if (!cleanMessage) return null;
+    
+    return (
+      <div className="px-3 py-2 hover:bg-gray-50/50">
+        <div 
+          onClick={() => setExpanded(!expanded)} 
+          className="flex items-center gap-2 cursor-pointer"
+        >
+          <Icons.Lightbulb className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
+          <span className="text-gray-500 text-xs font-medium">思考</span>
+          <span className="text-gray-400 text-xs truncate flex-1">{cleanMessage.substring(0, 50)}{cleanMessage.length > 50 ? '...' : ''}</span>
+          {expanded ? <Icons.ChevronUp className="w-3 h-3 text-gray-400 flex-shrink-0" /> : <Icons.ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+        </div>
+        {expanded && (
+          <div className="mt-2 ml-5 p-2 bg-gray-50 rounded text-xs max-h-60 overflow-y-auto custom-scrollbar">
+            <div className="text-gray-700 font-mono whitespace-pre-wrap leading-relaxed">
+              {cleanMessage}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (log.type === 'tool_call') {
     return (
@@ -83,13 +108,12 @@ const CompactEventItem: React.FC<{ log: LogEntry }> = ({ log }) => {
   );
 };
 
-const ThoughtProcess: React.FC<ThoughtProcessProps> = ({ thought, logs, duration, plan, isStreaming }) => {
+const ThoughtProcess: React.FC<ThoughtProcessProps> = ({ logs, duration, plan, isStreaming }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [isPlanExpanded, setIsPlanExpanded] = useState(true);
-  const hasThoughtContent = thought && thought.length > 0;
   const hasLogs = (logs && logs.length > 0) || (plan && plan.plan_id);
 
-  if (!hasThoughtContent && !hasLogs) return null;
+  if (!hasLogs) return null;
 
   // Calculate total count for execution records
   // We count: logs + 1 (for plan creation) + 1 (for the "Execution Steps" group)
@@ -123,21 +147,6 @@ const ThoughtProcess: React.FC<ThoughtProcessProps> = ({ thought, logs, duration
       {/* Content */}
       {isOpen && (
         <div className="p-2 space-y-2 bg-gray-50/30">
-          {/* Thinking Content */}
-          {hasThoughtContent && (
-            <div className="bg-white border border-gray-100 rounded-lg overflow-hidden text-sm">
-              <div className="px-3 py-2 flex items-start gap-2">
-                <Icons.Lightbulb className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-gray-500 font-medium text-xs uppercase tracking-wider mb-1">思考</div>
-                  <div className="text-gray-700 text-[13px] font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto custom-scrollbar">
-                    {thought}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          
           {/* Execution Record */}
           {hasLogs && (
             <div className="bg-white border border-gray-100 rounded-lg overflow-hidden text-sm">

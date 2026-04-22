@@ -12,6 +12,7 @@ export interface Message {
   isStreaming?: boolean;
   created_at?: string;
   thought?: string;
+  answer?: string;
   logs?: LogEntry[];
   files?: string[];
   plan?: Plan;
@@ -31,7 +32,7 @@ export interface Plan {
 }
 
 export interface LogEntry {
-  type: 'tool_call' | 'tool_output';
+  type: 'tool_call' | 'tool_output' | 'thought';
   message: string;
   status?: 'success' | 'error';
   args?: any;

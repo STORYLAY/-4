@@ -1,5 +1,7 @@
 import { ConversationApiResponse, ConversationDetailApiResponse, AppUsageApiResponse } from "../types";
+// import {getRequestURL} from "../../../../utils";
 
+// const BASE_URL = getRequestURL()
 const BASE_URL = "http://192.168.1.201:5005";
 
 export class ApiError extends Error {
@@ -257,6 +259,35 @@ export const uploadFile = async (file: File): Promise<any> => {
 
   if (!response.ok) {
     throw new Error('Failed to upload file');
+  }
+
+  return response.json();
+};
+
+export const createAnalyProject = async (projectName: string, file: File): Promise<any> => {
+  const formData = new FormData();
+  formData.append('project_name', projectName);
+  formData.append('data_source', 'upload');
+  formData.append('data_file', file);
+
+  const headers: Record<string, string> = {};
+  const token = localStorage.getItem('console_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${BASE_URL}/console/api/apps/analy/project`, {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+
+  if (response.status === 401) {
+    throw new ApiError('Unauthorized', 401);
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to create analysis project');
   }
 
   return response.json();

@@ -67,7 +67,7 @@ async function startServer() {
         conversation_id: "1",
         role: "assistant",
         content: "2026 年度的核心战略是数字化转型与全球化扩张。",
-        message_type: "text",
+        message_type: "answer",
         metadata: null,
         created_at: "2026-01-01T00:01:00Z"
       }
@@ -87,7 +87,7 @@ async function startServer() {
         conversation_id: "2",
         role: "assistant",
         content: "我们的核心竞争力在于拥有自主研发的 AI 算法和庞大的行业数据库。",
-        message_type: "text",
+        message_type: "answer",
         metadata: null,
         created_at: "2026-01-02T00:01:00Z"
       }

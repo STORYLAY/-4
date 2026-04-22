@@ -8,6 +8,7 @@ import { streamChatResponse } from './services/geminiService';
 import { fetchConversations, fetchConversationDetail, runThinkingMode, runPlanningMode, fetchModelTypes, fetchAppsUsage, fetchExploreApps, fetchSkills, ApiError, deleteConversation, renameConversation, uploadFile } from './services/apiService';
 import { Message, Role, HistoryItem, AppShortcut } from './types';
 import { Icons, INPUT_CHIPS } from './constants';
+import { Toaster } from 'sonner';
 
 const AppContent: React.FC = () => {
   // History State
@@ -549,6 +550,21 @@ const AppContent: React.FC = () => {
 
                             if (event.type === 'thought' && event.data?.content) {
                                 newMsg.thought += event.data.content;
+                                
+                                const lastLog = newMsg.logs[newMsg.logs.length - 1];
+                                if (lastLog && lastLog.type === 'thought') {
+                                    const updatedLogs = [...newMsg.logs];
+                                    updatedLogs[updatedLogs.length - 1] = {
+                                        ...lastLog,
+                                        message: lastLog.message + event.data.content
+                                    };
+                                    newMsg.logs = updatedLogs;
+                                } else {
+                                    newMsg.logs = [...newMsg.logs, {
+                                        type: 'thought',
+                                        message: event.data.content
+                                    }];
+                                }
                             } else if (event.type === 'tool_call') {
                                 newMsg.logs = [...newMsg.logs, {
                                     type: 'tool_call',
@@ -607,6 +623,8 @@ const AppContent: React.FC = () => {
                                 }
                             } else if ((event.type === 'response' || event.type === 'delta' || event.type === 'final') && event.data?.content) {
                                 newMsg.text += event.data.content;
+                            } else if (event.type === 'answer' && event.data?.content) {
+                                newMsg.answer = (newMsg.answer || '') + event.data.content;
                             } else if (event.type === 'files' && event.data?.files) {
                                 newMsg.files = [...(newMsg.files || []), ...event.data.files];
                             } else if (event.type === 'error') {
@@ -984,16 +1002,161 @@ const AppContent: React.FC = () => {
     // Otherwise fetch details
     try {
       const detail = await fetchConversationDetail(id);
-      const mappedMessages: Message[] = detail.messages.map(m => ({
-        id: m.id,
-        role: m.role === 'user' ? Role.USER : Role.MODEL,
-        text: m.content,
-        created_at: m.created_at
-      }));
+      const mappedMessages: Message[] = [];
+      let currentAssistantMsg: Message | null = null;
 
-      setChatStore(prev => ({ ...prev, [id]: mappedMessages }));
+      detail.messages.forEach(m => {
+        let textContent = m.content;
+        let meta = m.metadata;
+        
+        // Sometimes backend might send everything in content as JSON
+        if (typeof textContent === 'string' && textContent.trim().startsWith('{') && textContent.trim().endsWith('}')) {
+          try {
+            const parsedContent = JSON.parse(textContent);
+            if (parsedContent.text || parsedContent.answer || parsedContent.logs) {
+              textContent = parsedContent.text || parsedContent.answer || '';
+              if (!meta) meta = parsedContent;
+              else meta = { ...meta, ...parsedContent };
+            }
+          } catch (e) {
+            // Not JSON, ignore
+          }
+        }
+
+        if (typeof meta === 'string') {
+          try {
+            meta = JSON.parse(meta);
+          } catch (e) {
+            console.error('Failed to parse metadata', e);
+          }
+        }
+
+        // If message_type is 'text', it's a new question
+        if (m.message_type === 'text') {
+          mappedMessages.push({
+            id: m.id,
+            role: Role.USER,
+            text: textContent,
+            created_at: m.created_at
+          });
+          
+          // Prepare a new assistant message for the subsequent items
+          currentAssistantMsg = {
+            id: m.id + '_assistant',
+            role: Role.MODEL,
+            text: '',
+            logs: [],
+            created_at: m.created_at
+          };
+          mappedMessages.push(currentAssistantMsg);
+        } else if (currentAssistantMsg) {
+          // It's part of the assistant's answer
+          if (m.message_type === 'thought') {
+            currentAssistantMsg.logs!.push({ type: 'thought', message: textContent });
+          } else if (m.message_type === 'tool_call') {
+            let args = meta?.arguments || meta?.args || textContent;
+            if (typeof args === 'string') {
+              try { args = JSON.parse(args); } catch(e) {}
+            }
+            currentAssistantMsg.logs!.push({
+              type: 'tool_call',
+              message: meta?.tool_name || meta?.name || 'Unknown Tool',
+              status: 'success',
+              args: args
+            });
+          } else if (m.message_type === 'tool_result') {
+            currentAssistantMsg.logs!.push({
+              type: 'tool_output',
+              message: textContent || 'No result',
+              status: 'success'
+            });
+          } else if (m.message_type === 'answer') {
+            currentAssistantMsg.answer = currentAssistantMsg.answer 
+              ? currentAssistantMsg.answer + '\n\n' + textContent 
+              : textContent;
+          } else if (m.message_type === 'final' || m.message_type === 'summary') {
+            currentAssistantMsg.text = currentAssistantMsg.text 
+              ? currentAssistantMsg.text + '\n\n' + textContent 
+              : textContent;
+          } else if (m.message_type === 'file' || m.message_type === 'files') {
+            if (!currentAssistantMsg.files) currentAssistantMsg.files = [];
+            let parsedFiles = [];
+            try {
+              const parsed = JSON.parse(textContent);
+              if (Array.isArray(parsed)) {
+                parsedFiles = parsed;
+              } else if (parsed && Array.isArray(parsed.files)) {
+                parsedFiles = parsed.files;
+              } else if (parsed && typeof parsed.file === 'string') {
+                parsedFiles = [parsed.file];
+              } else {
+                parsedFiles = [textContent];
+              }
+            } catch (e) {
+              // Not JSON, assume a naked path or comma-separated
+              if (textContent.includes(',')) {
+                parsedFiles = textContent.split(',').map((f: string) => f.trim());
+              } else {
+                parsedFiles = [textContent];
+              }
+            }
+            parsedFiles.forEach((f: string) => {
+              if (f && !currentAssistantMsg.files!.includes(f)) {
+                currentAssistantMsg.files!.push(f);
+              }
+            });
+          } else {
+            // Ignore other unknown message types from being displayed as main text 
+            // so we don't accidentally render internal system artifacts.
+          }
+          
+          // Merge metadata if present
+          if (meta) {
+            if (meta.plan) currentAssistantMsg.plan = meta.plan;
+            if (meta.files && Array.isArray(meta.files)) {
+              if (!currentAssistantMsg.files) currentAssistantMsg.files = [];
+              meta.files.forEach((f: any) => {
+                const pathStr = typeof f === 'string' ? f : (f.path || f.url || f.file || JSON.stringify(f));
+                if (pathStr && !currentAssistantMsg.files!.includes(pathStr)) {
+                  currentAssistantMsg.files!.push(pathStr);
+                }
+              });
+            }
+            if (meta.thought) {
+              currentAssistantMsg.thought = meta.thought;
+              if (!currentAssistantMsg.logs || currentAssistantMsg.logs.length === 0) {
+                currentAssistantMsg.logs = [{ type: 'thought', message: meta.thought }];
+              } else if (!currentAssistantMsg.logs.some(l => l.type === 'thought')) {
+                currentAssistantMsg.logs = [{ type: 'thought', message: meta.thought }, ...currentAssistantMsg.logs];
+              }
+            }
+            if (meta.logs) {
+              currentAssistantMsg.logs = [...(currentAssistantMsg.logs || []), ...meta.logs];
+            } else if (meta.tool_calls) {
+              const toolLogs = meta.tool_calls.map((tc: any) => ({
+                type: 'tool_call',
+                message: tc.name || tc.tool_name || 'Unknown Tool',
+                status: 'success',
+                args: tc.arguments || tc.args
+              }));
+              currentAssistantMsg.logs = [...(currentAssistantMsg.logs || []), ...toolLogs];
+            }
+            if (meta.answer) {
+              currentAssistantMsg.answer = meta.answer;
+            }
+          }
+        }
+      });
+
+      // Filter out empty assistant messages
+      const finalMessages = mappedMessages.filter(msg => {
+        if (msg.role === Role.USER) return true;
+        return msg.text || msg.answer || (msg.logs && msg.logs.length > 0) || msg.plan || (msg.files && msg.files.length > 0);
+      });
+
+      setChatStore(prev => ({ ...prev, [id]: finalMessages }));
       setCurrentChatId(id);
-      setMessages(mappedMessages);
+      setMessages(finalMessages);
       setIsStreaming(false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -1272,7 +1435,7 @@ const AppContent: React.FC = () => {
         {/* Input Area Container */}
         <div 
           className={`
-          z-20 w-full flex justify-center px-4 sm:px-6 lg:px-8 transition-all duration-500 ease-in-out
+          z-20 w-full flex justify-center px-4 sm:px-6 lg:px-8
           ${isWelcomeMode 
             ? 'absolute top-[48%] left-1/2 transform -translate-x-1/2 -translate-y-1/2' 
             : 'absolute bottom-0 left-0 pb-6 pt-12 bg-gradient-to-t from-[#ffffff] via-[#ffffff] to-transparent'
@@ -1283,7 +1446,7 @@ const AppContent: React.FC = () => {
             id="tour-input"
             className={`
             w-full max-w-3xl bg-white rounded-2xl border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)] 
-            transition-all duration-300 flex flex-col overflow-visible relative
+            flex flex-col overflow-visible relative
             ${isWelcomeMode ? 'p-1' : 'p-1'}
             ${isListening ? 'ring-2 ring-red-400 border-red-400' : ''}
           `}>
@@ -1722,5 +1885,10 @@ const AppContent: React.FC = () => {
 };
 
 export default function AgentPage() {
-  return <AppContent />;
+  return (
+    <>
+      <Toaster position="top-right" richColors closeButton />
+      <AppContent />
+    </>
+  );
 }

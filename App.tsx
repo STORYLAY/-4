@@ -8,7 +8,7 @@ import { streamChatResponse } from './services/geminiService';
 import { fetchConversations, fetchConversationDetail, runThinkingMode, runPlanningMode, fetchModelTypes, fetchAppsUsage, fetchExploreApps, fetchSkills, ApiError, deleteConversation, renameConversation, uploadFile } from './services/apiService';
 import { Message, Role, HistoryItem, AppShortcut } from './types';
 import { Icons, INPUT_CHIPS } from './constants';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 
 const AppContent: React.FC = () => {
   // History State
@@ -757,11 +757,9 @@ const AppContent: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
       const response = await uploadFile(file);
@@ -773,13 +771,45 @@ const AppContent: React.FC = () => {
         setShowTokenPrompt(true);
       } else {
         console.error('File upload failed:', error);
-        alert('文件上传失败，请重试');
+        toast.error('文件上传失败，请重试');
       }
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processFileUpload(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (e.currentTarget && !e.currentTarget.contains(e.relatedTarget as Node)) {
+       setIsDragging(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    for (const file of files) {
+      await processFileUpload(file);
     }
   };
 
@@ -1105,6 +1135,22 @@ const AppContent: React.FC = () => {
                 currentAssistantMsg.files!.push(f);
               }
             });
+          } else if (m.message_type === 'plan_created') {
+            try {
+               let planData = JSON.parse(m.content);
+               currentAssistantMsg.plan = {
+                 plan_id: planData.plan_id || '',
+                 title: planData.title || 'Plan',
+                 steps: (planData.steps || []).map((step: any, index: number) => ({
+                   index,
+                   text: typeof step === 'string' ? step : (step.text || ''),
+                   status: step.status || 'pending',
+                   agent_name: step.agent_name || ''
+                 }))
+               };
+            } catch (e) {
+               console.error("Failed to parse plan_created content:", e);
+            }
           } else {
             // Ignore other unknown message types from being displayed as main text 
             // so we don't accidentally render internal system artifacts.
@@ -1444,12 +1490,28 @@ const AppContent: React.FC = () => {
             {/* Input Box Card */}
           <div 
             id="tour-input"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={`
             w-full max-w-3xl bg-white rounded-2xl border border-gray-200 shadow-[0_4px_20px_rgba(0,0,0,0.08)] 
-            flex flex-col overflow-visible relative
+            flex flex-col overflow-visible relative transition-colors
             ${isWelcomeMode ? 'p-1' : 'p-1'}
             ${isListening ? 'ring-2 ring-red-400 border-red-400' : ''}
           `}>
+             
+            {/* Drag Overlay */}
+            {isDragging && (
+              <div className="absolute inset-0 z-[99] bg-white/80 backdrop-blur-sm rounded-2xl border-[1.5px] border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)] flex items-center justify-center transition-all duration-200 overflow-hidden">
+                <div className="absolute inset-0 bg-blue-50/30 pointer-events-none" />
+                <div className="relative flex items-center space-x-3 pointer-events-none text-blue-600">
+                  <div className="flex items-center justify-center w-10 h-10 bg-blue-100/80 rounded-full">
+                    <Icons.Upload className="w-5 h-5 transition-transform duration-300 -translate-y-0.5" />
+                  </div>
+                  <span className="text-[15px] font-medium tracking-wide">松开鼠标即可上传</span>
+                </div>
+              </div>
+            )}
             
             {/* Textarea Section */}
             <div className="relative px-4 pt-3 pb-1">

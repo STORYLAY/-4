@@ -813,6 +813,16 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      e.preventDefault(); // Prevent default image paste which doesn't work out of the box in simple textareas
+      const files = Array.from(e.clipboardData.files);
+      for (const file of files) {
+        await processFileUpload(file);
+      }
+    }
+  };
+
   const handleRemoveFile = (idToRemove: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== idToRemove));
   };
@@ -1686,6 +1696,7 @@ const AppContent: React.FC = () => {
                   value={inputText}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   placeholder={isListening ? "正在聆听..." : (agentMode === 'single' ? "输入您的问题，或输入/选择技能，#选择应用..." : "输入您的问题，或输入@选择智能体，/选择技能，#选择应用...")}
                   className={`
                      w-full focus:outline-none resize-none bg-transparent custom-scrollbar text-gray-700

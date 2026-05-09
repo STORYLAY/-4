@@ -47,6 +47,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   // State for Delete Confirmation Modal
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
+  // State for Search
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Close menu when clicking outside or iframe loses focus
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -124,13 +127,34 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // --- Helper to format date mock ---
+  const formatTime = (dateString?: string) => {
+    if (!dateString) return '今天 10:00';
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const timeStr = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      
+      if (diffDays === 0) return `今天 ${timeStr}`;
+      if (diffDays === 1) return `昨天 ${timeStr}`;
+      if (diffDays > 1 && diffDays < 7) return `${diffDays}天前`;
+      return `${date.getMonth() + 1}/${date.getDate()}`;
+    } catch (e) {
+      return '今天 10:00';
+    }
+  };
+
   const renderHistoryItem = (item: HistoryItem, isPinned: boolean) => {
     const isEditing = editingId === item.id;
     const isActive = item.id === currentChatId;
 
     if (isEditing) {
       return (
-        <div key={item.id} className="flex items-center px-3 py-2 bg-primary-50 rounded-lg mb-0.5 border border-primary-200">
+        <div key={item.id} className="flex items-center px-4 py-3 bg-[#F9FBFF] rounded-[10px] mb-0.5 border border-[#325ded]">
            <div className="w-full flex items-center">
              <input
                autoFocus
@@ -139,7 +163,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                onChange={(e) => setEditTitle(e.target.value)}
                onBlur={saveEditing}
                onKeyDown={handleKeyDown}
-               className="w-full bg-transparent text-sm text-gray-800 focus:outline-none"
+               className="w-full bg-transparent text-[14px] text-gray-800 focus:outline-none"
              />
            </div>
         </div>
@@ -150,22 +174,28 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div 
         key={item.id} 
         onClick={() => onSelectHistory(item.id)}
-        className={`group flex items-center px-3 py-2.5 rounded-lg cursor-pointer transition-all text-gray-600 mb-0.5 relative ${isActive ? 'bg-[#e4edfd] text-[#4a72fe] font-medium' : 'hover:bg-gray-100'}`}
+        className={`group flex items-start px-3 py-3 rounded-xl cursor-pointer transition-all mb-0.5 relative ${isActive ? 'bg-[#F4F6FF]' : 'hover:bg-[#F9FAFB]'}`}
       >
-        {/* Active Indicator Bar */}
-        {isActive && <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-4 bg-[#4a72fe] rounded-r-full"></div>}
+        <div className="mt-0.5 mr-2.5 text-gray-400 w-[18px] h-[18px] flex-shrink-0 flex items-center justify-center">
+           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={isActive ? 'text-[#325ded]' : 'text-gray-400'}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div className="flex-1 overflow-hidden">
+           <div className={`text-[14px] font-[500] truncate mb-1 ${isActive ? 'text-[#325ded]' : 'text-gray-800'}`}>
+             {item.title}
+           </div>
 
-        <span className={`mr-3 transform scale-90 ${isPinned ? 'text-[#4a72fe]' : (isActive ? 'text-[#4a72fe]' : 'text-gray-400 group-hover:text-gray-500')}`}>
-          {isPinned ? <Icons.Pin /> : <Icons.Clock />}
-        </span>
-        <span className="truncate flex-1 text-sm pr-10">{item.title}</span>
+           <div className="text-[11px] text-gray-400 flex items-center">
+             <svg className="w-3 h-3 mr-1 opacity-70" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+             {formatTime(item.created_at || item.updated_at)}
+           </div>
+        </div>
         
         {/* Menu Button */}
-        <div className="absolute right-2 z-10">
+        <div className="absolute right-2 top-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
            <button
               onClick={(e) => { 
                 e.stopPropagation(); 
-                e.preventDefault(); // Prevent focus shift that might trigger blur
+                e.preventDefault(); 
                 
                 if (openMenuId === item.id) {
                   setOpenMenuId(null);
@@ -190,7 +220,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   setOpenMenuId(item.id);
                 }
               }}
-              className={`menu-trigger-button p-1 rounded transition-colors ${isActive ? 'text-[#4a72fe] hover:bg-[#d0e0fd]' : 'hover:bg-gray-200 text-gray-400'}`}
+              className={`menu-trigger-button p-1 rounded-md transition-colors ${isActive ? 'bg-[#E5EDFF] hover:bg-[#D0E0FD] text-[#325ded]' : 'bg-white hover:bg-gray-100 text-gray-500 shadow-sm border border-gray-100'}`}
            >
               <Icons.MoreHorizontal />
            </button>
@@ -221,35 +251,32 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <div className="w-[260px] h-full bg-[#f9fafb] border-r border-gray-200 flex flex-col text-sm text-gray-700 flex-shrink-0 relative z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        {/* Header */}
-        <div className="h-16 flex items-center justify-between px-5 border-b border-gray-50 flex-shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 flex items-center justify-center">
-              <div className="transform scale-110">
-                  <Icons.YanfuLogo />
-              </div>
-            </div>
-            <span className="font-bold text-gray-800 text-base tracking-tight font-sans">言复智能</span>
-          </div>
+      <div className="w-[260px] h-full bg-white border-r border-gray-100 flex flex-col text-sm text-gray-700 flex-shrink-0 relative z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+        {/* New Chat Button */}
+        <div className="px-4 py-4 flex-shrink-0" id="tour-new-chat">
           <button 
-            onClick={onCollapse}
-            className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-            title="收起侧边栏"
+            onClick={onNewChat}
+            className="w-full bg-[#2563eb] hover:bg-[#1a41b5] text-white rounded-xl py-2.5 flex items-center justify-center space-x-2 shadow-sm transition-all duration-200 cursor-pointer"
           >
-            <Icons.Layout />
+            <span className="w-4 h-4"><Icons.Plus /></span>
+            <span className="font-normal text-[15px]">新建对话</span>
           </button>
         </div>
 
-        {/* New Chat Button */}
-        <div className="p-4 pb-2 flex-shrink-0 space-y-2" id="tour-new-chat">
-          <button 
-            onClick={onNewChat}
-            className="w-full bg-white hover:bg-gray-50 text-[#325ded] border border-[#325ded] rounded-xl py-3 px-4 flex items-center justify-center space-x-2 shadow-sm hover:shadow-md transition-all duration-300 group transform hover:-translate-y-0.5"
-          >
-            <Icons.Plus />
-            <span className="font-semibold tracking-wide">新建对话</span>
-          </button>
+        {/* Search Input */}
+        <div className="px-4 py-2 flex-shrink-0">
+          <div className="relative flex items-center">
+            <span className="absolute left-3 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <input 
+              type="text" 
+              placeholder="搜索对话..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#F9FAFB] text-gray-700 text-[13px] rounded-xl pl-9 pr-3 py-2 outline-none focus:ring-1 focus:ring-blue-500 border border-gray-100"
+            />
+          </div>
         </div>
 
         {/* Main Split Content Area */}
@@ -257,21 +284,21 @@ const Sidebar: React.FC<SidebarProps> = ({
           
           {/* Top Section: History (60%) */}
           <div 
-            className="flex-1 overflow-y-auto px-3 custom-scrollbar min-h-0" 
+            className="flex-1 overflow-y-auto px-2 custom-scrollbar min-h-0" 
             id="tour-history"
             onScroll={handleScroll}
           >
             {hasHistory && (
-              <div className="mt-4 mb-2">
-                <div className="px-3 py-2 flex items-center text-xs text-gray-400 font-semibold uppercase tracking-wider justify-between group">
-                    <span>历史记录</span>
+              <div className="mb-2">
+                <div className="px-2 pt-2 flex items-center text-[12px] text-gray-400">
+                    <span>历史对话</span>
                 </div>
                 
                 {/* Pinned Items */}
-                {pinnedHistory.map(item => renderHistoryItem(item, true))}
+                {pinnedHistory.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase())).map(item => renderHistoryItem(item, true))}
 
                 {/* Recent Items */}
-                {recentHistory.map(item => renderHistoryItem(item, false))}
+                {recentHistory.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase())).map(item => renderHistoryItem(item, false))}
                 
                 {/* Loading Indicator */}
                 {isLoadingMore && (

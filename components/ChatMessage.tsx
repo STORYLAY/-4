@@ -288,29 +288,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onRegenerate, onImag
 
   return (
     <div className={`flex w-full mb-8 animate-fade-in ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex ${isUser ? 'max-w-[85%] sm:max-w-[80%] flex-row-reverse' : 'w-full flex-col items-start'}`}>
+      <div className={`flex ${isUser ? 'max-w-[85%] sm:max-w-[80%] flex-row-reverse' : 'w-full sm:max-w-[95%] xl:max-w-[85%] flex-row'}`}>
         
-        {/* AI Header (Avatar + Name) */}
-        {!isUser && (
-          <div className="flex items-center space-x-2 mb-3 ml-1">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm bg-white border border-gray-100 ring-2 ring-gray-50">
-              <div className="w-4 h-4 flex items-center justify-center">
-                 <Icons.YanfuLogo />
-              </div>
-            </div>
-            <span className="text-sm font-medium text-gray-700">言复智能</span>
-          </div>
-        )}
-
-        {/* User Avatar */}
-        {isUser && (
-          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm transition-transform hover:scale-105 ml-3 bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+        {/* Avatar */}
+        {isUser ? (
+          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm transition-transform hover:scale-105 bg-gradient-to-br from-blue-500 to-blue-600 text-white ml-3">
             <Icons.User />
+          </div>
+        ) : (
+          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm bg-white border border-gray-100 ring-2 ring-gray-50 mt-1.5 mr-3">
+            <div className="w-5 h-5 flex items-center justify-center">
+               <Icons.YanfuLogo />
+            </div>
           </div>
         )}
 
         {/* Content Column */}
-        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0 flex-1 w-full`}>
+        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} min-w-0 flex-1`}>
           
           {/* Thinking Indicator (Only when empty and streaming) */}
           {showThinking && (

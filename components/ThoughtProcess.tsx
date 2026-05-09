@@ -146,7 +146,7 @@ const ThoughtProcess: React.FC<ThoughtProcessProps> = ({ logs, duration, plan, i
 
       {/* Content */}
       {isOpen && (
-        <div className="p-2 space-y-2 bg-gray-50/30">
+        <div className="p-2 space-y-2 bg-white">
           {/* Execution Record */}
           {hasLogs && (
             <div className="bg-white border border-gray-100 rounded-lg overflow-hidden text-sm">

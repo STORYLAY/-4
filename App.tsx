@@ -834,12 +834,17 @@ const AppContent: React.FC = () => {
         abortControllerRef.current &&
         !abortControllerRef.current.signal.aborted
       ) {
+        let errorMessage = "Sorry, I encountered an error. Please check your API Key or Network.";
+        if (error instanceof ApiError && error.status === 400) {
+          errorMessage = error.message;
+        }
+
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === modelMsgId
               ? {
                   ...msg,
-                  text: "Sorry, I encountered an error. Please check your API Key or Network.",
+                  text: errorMessage,
                 }
               : msg,
           ),

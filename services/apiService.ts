@@ -129,7 +129,16 @@ export const runThinkingMode = async (prompt: string, agentType: string, modelCo
   }
 
   if (!response.ok) {
-    throw new Error('Failed to run thinking mode');
+    let errorMessage = 'Failed to run thinking mode';
+    try {
+      const errorData = await response.json();
+      if (errorData && errorData.message) {
+        errorMessage = errorData.message;
+      }
+    } catch (e) {
+      errorMessage = await response.text() || errorMessage;
+    }
+    throw new ApiError(errorMessage, response.status);
   }
 
   return response; // Assuming stream response
@@ -162,7 +171,16 @@ export const runPlanningMode = async (prompt: string, agents: string[], modelCon
   }
 
   if (!response.ok) {
-    throw new Error('Failed to run planning mode');
+    let errorMessage = 'Failed to run planning mode';
+    try {
+      const errorData = await response.json();
+      if (errorData && errorData.message) {
+        errorMessage = errorData.message;
+      }
+    } catch (e) {
+      errorMessage = await response.text() || errorMessage;
+    }
+    throw new ApiError(errorMessage, response.status);
   }
 
   return response; // Assuming stream response

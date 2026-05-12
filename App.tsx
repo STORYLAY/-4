@@ -892,7 +892,7 @@ const AppContent: React.FC = () => {
           ? inputText.trim().substring(0, 20) + "..."
           : inputText.trim();
 
-      const newHistoryItem: HistoryItem = { id: activeChatId, title: title };
+      const newHistoryItem: HistoryItem = { id: activeChatId, title: title, created_at: new Date().toISOString() };
       setRecentHistory((prev) => [newHistoryItem, ...prev]);
     }
 

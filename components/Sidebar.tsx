@@ -129,7 +129,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   // --- Helper to format date mock ---
   const formatTime = (dateString?: string) => {
-    if (!dateString) return '今天 10:00';
+    if (!dateString) return '刚刚';
     try {
       // Fix: directly parse the datestring. The previous issue was incorrect day diff logic.
       const date = new Date(dateString);
@@ -143,6 +143,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       
       const diffMs = today.getTime() - itemDay.getTime();
       const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      
+      const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+      if (diffMinutes < 5 && diffMinutes >= 0) return '刚刚';
       
       if (diffDays === 0) return `今天 ${timeStr}`;
       if (diffDays === 1) return `昨天 ${timeStr}`;

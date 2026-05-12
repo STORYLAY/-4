@@ -131,20 +131,25 @@ const Sidebar: React.FC<SidebarProps> = ({
   const formatTime = (dateString?: string) => {
     if (!dateString) return '今天 10:00';
     try {
+      // Fix: directly parse the datestring. The previous issue was incorrect day diff logic.
       const date = new Date(dateString);
       const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
       
       const pad = (n: number) => n.toString().padStart(2, '0');
       const timeStr = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const itemDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      
+      const diffMs = today.getTime() - itemDay.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
       
       if (diffDays === 0) return `今天 ${timeStr}`;
       if (diffDays === 1) return `昨天 ${timeStr}`;
       if (diffDays > 1 && diffDays < 7) return `${diffDays}天前`;
-      return `${date.getMonth() + 1}/${date.getDate()}`;
+      return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${timeStr}`;
     } catch (e) {
-      return '今天 10:00';
+      return '';
     }
   };
 
@@ -235,9 +240,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                <button onClick={(e) => { e.stopPropagation(); startEditing(e, item); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2">
                  <span className="w-4 h-4"><Icons.Edit /></span> <span>重命名</span>
                </button>
-               <button onClick={(e) => { e.stopPropagation(); onTogglePin(item.id); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2">
+               {/* <button onClick={(e) => { e.stopPropagation(); onTogglePin(item.id); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2">
                  <span className="w-4 h-4"><Icons.Pin /></span> <span>{isPinned ? '取消置顶' : '置顶'}</span>
-               </button>
+               </button> */}
                <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(e, item.id); setOpenMenuId(null); }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2">
                  <span className="w-4 h-4"><Icons.Trash /></span> <span>删除</span>
                </button>

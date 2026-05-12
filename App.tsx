@@ -2482,7 +2482,7 @@ const AppContent: React.FC = () => {
                       <div
                         ref={modelDropdownRef}
                         onClick={(e) => e.stopPropagation()}
-                        className={`absolute ${isWelcomeMode ? "top-full mt-2" : "bottom-full mb-2"} left-0 bg-white rounded-xl shadow-2xl border border-gray-100 w-72 animate-fade-in z-30 flex flex-col max-h-[400px]`}
+                        className={`absolute ${isWelcomeMode ? "top-full mt-2" : "bottom-full mb-2"} left-0 bg-white rounded-xl shadow-2xl border border-gray-100 w-72 animate-fade-in z-30 flex flex-col max-h-[200px]`}
                       >
                         <div className="flex-shrink-0 text-xs font-semibold text-gray-400 px-4 py-2 border-b border-gray-50 bg-white rounded-t-xl">
                           选择 AI 模型
@@ -2565,7 +2565,7 @@ const AppContent: React.FC = () => {
                           <div
                             ref={agentDropdownRef}
                             onClick={(e) => e.stopPropagation()}
-                            className={`absolute ${isWelcomeMode ? "top-full mt-2" : "bottom-full mb-2"} left-0 bg-white rounded-xl shadow-2xl border border-gray-100 p-1 w-48 animate-fade-in z-30 overflow-hidden`}
+                            className={`absolute ${isWelcomeMode ? "top-full mt-2" : "bottom-full mb-2"} left-0 bg-white rounded-xl shadow-2xl border border-gray-100 p-1 w-48 animate-fade-in z-30 overflow-y-auto custom-scrollbar max-h-[250px]`}
                           >
                             <div className="text-xs font-semibold text-gray-400 px-3 py-2 border-b border-gray-50 mb-1">
                               选择智能体
@@ -2624,7 +2624,7 @@ const AppContent: React.FC = () => {
 
           {/* Welcome Cards in Flow */}
           {isWelcomeMode && (
-            <div className="w-full flex justify-center z-10 flex-shrink-0 pb-16">
+            <div className="w-full flex justify-center z-10 flex-shrink-0">
               <WelcomeCards
                 apps={recentApps.slice(0, 4)}
                 onSuggestionClick={handleSuggestionClick}

@@ -282,6 +282,50 @@ export const uploadFile = async (file: File): Promise<any> => {
   return response.json();
 };
 
+export const fetchDatasets = async (page = 1, limit = 20, keyword = ''): Promise<any> => {
+  const url = new URL(`${BASE_URL}/console/api/datasets`);
+  url.searchParams.append('page', page.toString());
+  url.searchParams.append('limit', limit.toString());
+  if (keyword) {
+    url.searchParams.append('keyword', keyword);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: getHeaders(),
+  });
+
+  if (response.status === 401) {
+    throw new ApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    throw new Error('Failed to fetch datasets');
+  }
+  return response.json();
+};
+
+export const fetchDatasetDocuments = async (datasetId: string, page = 1, limit = 20, keyword = ''): Promise<any> => {
+  const url = new URL(`${BASE_URL}/console/api/datasets/${datasetId}/documents`);
+  url.searchParams.append('page', page.toString());
+  url.searchParams.append('limit', limit.toString());
+  if (keyword) {
+    url.searchParams.append('keyword', keyword);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: getHeaders(),
+  });
+
+  if (response.status === 401) {
+    throw new ApiError('Unauthorized', 401);
+  }
+  if (!response.ok) {
+    throw new Error('Failed to fetch dataset documents');
+  }
+  return response.json();
+};
+
 export const createAnalyProject = async (projectName: string, file: File): Promise<any> => {
   const formData = new FormData();
   formData.append('project_name', projectName);

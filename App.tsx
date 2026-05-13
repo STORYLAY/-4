@@ -18,11 +18,54 @@ import {
   deleteConversation,
   renameConversation,
   uploadFile,
+  fetchDatasets,
+  fetchDatasetDocuments,
 } from "./services/apiService";
 import { Message, Role, HistoryItem, AppShortcut } from "./types";
 import { Icons, INPUT_CHIPS } from "./constants";
 import { Toaster, toast } from "sonner";
-import { Settings, BookOpen } from "lucide-react";
+import { Settings, BookOpen, FileText as LucideFileText, Image as ImageIcon, FileSpreadsheet, Globe as Globe01, Search } from "lucide-react";
+// import FileTypeIcon from "@/app/components/base/file-uploader/file-type-icon";
+// import { extensionToFileType } from "@/app/components/datasets/hit-testing/utils/extension-to-file-type";
+
+export enum DataSourceType {
+  FILE = 'upload_file',
+  NOTION = 'notion_import',
+  WEB = 'web_link'
+}
+
+const NotionIcon = ({ className, src }: { className?: string, type?: string, src?: string }) => (
+  <img src={src || 'https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png'} className={`w-4 h-4 ${className}`} alt="Notion" />
+);
+
+export const FileTypeIcon = ({ type, className, size = 'md' }: { type: string, className?: string, size?: 'sm' | 'md' | 'lg' | 'xl' }) => {
+  let sizeClass = "w-4 h-4";
+  if (size === 'sm') sizeClass = "w-3 h-3";
+  if (size === 'lg') sizeClass = "w-5 h-5";
+  if (size === 'xl') sizeClass = "w-6 h-6";
+
+  if (['pdf', 'word', 'document', 'markdown', 'txt', 'md', 'doc', 'docx'].includes(type?.toLowerCase())) return <LucideFileText className={`${sizeClass} text-blue-500 ${className || ''}`} />;
+  if (['excel', 'csv', 'xls', 'xlsx'].includes(type?.toLowerCase())) return <FileSpreadsheet className={`${sizeClass} text-green-500 ${className || ''}`} />;
+  if (['image', 'gif', 'jpg', 'jpeg', 'png', 'svg', 'webp'].includes(type?.toLowerCase())) return <ImageIcon className={`${sizeClass} text-indigo-500 ${className || ''}`} />;
+  return <Icons.File className={`${sizeClass} text-gray-500 ${className || ''}`} />;
+};
+
+export const extensionToFileType = (ext: string) => {
+  if (!ext) return 'custom';
+  const e = ext.toLowerCase();
+  if (['pdf'].includes(e)) return 'pdf';
+  if (['doc', 'docx'].includes(e)) return 'word';
+  if (['xls', 'xlsx', 'csv'].includes(e)) return 'excel';
+  if (['ppt', 'pptx'].includes(e)) return 'ppt';
+  if (['jpg', 'jpeg', 'png', 'svg', 'webp'].includes(e)) return 'image';
+  if (['gif'].includes(e)) return 'gif';
+  if (['mp4', 'mov', 'avi'].includes(e)) return 'video';
+  if (['mp3', 'wav', 'ogg'].includes(e)) return 'audio';
+  if (['md'].includes(e)) return 'markdown';
+  if (['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'json', 'xml'].includes(e)) return 'code';
+  if (['txt'].includes(e)) return 'document';
+  return 'custom';
+};
 
 const AppContent: React.FC = () => {
   // History State
@@ -49,6 +92,22 @@ const AppContent: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<
     { id: string; name: string }[]
   >([]);
+
+  // File Upload State
+  const [showFileSourceMenu, setShowFileSourceMenu] = useState(false);
+  const [showDatasetModal, setShowDatasetModal] = useState(false);
+  const [datasets, setDatasets] = useState<any[]>([]);
+  const [datasetsPage, setDatasetsPage] = useState(1);
+  const [hasMoreDatasets, setHasMoreDatasets] = useState(true);
+  const [datasetSearchQuery, setDatasetSearchQuery] = useState("");
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
+  const [datasetDocuments, setDatasetDocuments] = useState<any[]>([]);
+  const [docsPage, setDocsPage] = useState(1);
+  const [hasMoreDocs, setHasMoreDocs] = useState(true);
+  const [docSearchQuery, setDocSearchQuery] = useState("");
+  const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+
   const [selectedAgent, setSelectedAgent] = useState("知识库专家");
   const [modelTypes, setModelTypes] = useState<any[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -452,6 +511,22 @@ const AppContent: React.FC = () => {
     }
   }, [inputText, uploadedFiles.length, selectedSkills.length]);
 
+  useEffect(() => {
+    if (!showDatasetModal || selectedDatasetId) return;
+    const timer = setTimeout(() => {
+      loadDatasets(1, false, datasetSearchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [datasetSearchQuery, showDatasetModal, selectedDatasetId]);
+
+  useEffect(() => {
+    if (!showDatasetModal || !selectedDatasetId) return;
+    const timer = setTimeout(() => {
+      loadDatasetDocs(selectedDatasetId, 1, false, docSearchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [docSearchQuery, showDatasetModal, selectedDatasetId]);
+
   // Calculate mention dropdown position
   useEffect(() => {
     if ((showAppMention || showAgentMention) && textareaRef.current) {
@@ -546,6 +621,73 @@ const AppContent: React.FC = () => {
       recognitionRef.current = recognition;
     }
   }, []);
+
+  const loadDatasets = async (page = 1, isLoadMore = false, keyword = datasetSearchQuery) => {
+    setIsLoadingDatasets(true);
+    try {
+      const data = await fetchDatasets(page, 10, keyword);
+      const newItems = data.data || [];
+      if (isLoadMore) {
+        setDatasets(prev => [...prev, ...newItems]);
+      } else {
+        setDatasets(newItems);
+      }
+      setHasMoreDatasets(newItems.length === 10);
+      setDatasetsPage(page);
+    } catch (error) {
+      toast.error('获取知识库列表失败');
+    } finally {
+      setIsLoadingDatasets(false);
+    }
+  };
+
+  const handleDatasetsScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 50 && hasMoreDatasets && !isLoadingDatasets) {
+      loadDatasets(datasetsPage + 1, true, datasetSearchQuery);
+    }
+  };
+
+  const loadDatasetDocs = async (datasetId: string, page = 1, isLoadMore = false, keyword = docSearchQuery) => {
+    setIsLoadingDocs(true);
+    try {
+      const data = await fetchDatasetDocuments(datasetId, page, 10, keyword);
+      const newItems = data.data || [];
+      if (isLoadMore) {
+        setDatasetDocuments(prev => [...prev, ...newItems]);
+      } else {
+        setDatasetDocuments(newItems);
+      }
+      setHasMoreDocs(newItems.length === 10);
+      setDocsPage(page);
+    } catch (error) {
+      toast.error('获取知识库文档失败');
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  const handleDocsScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 50 && hasMoreDocs && !isLoadingDocs && selectedDatasetId) {
+      loadDatasetDocs(selectedDatasetId, docsPage + 1, true, docSearchQuery);
+    }
+  };
+
+  const handleSelectDataset = async (datasetId: string) => {
+    setSelectedDatasetId(datasetId);
+    setDatasetDocuments([]);
+    setDocSearchQuery("");
+    loadDatasetDocs(datasetId, 1, false, "");
+  };
+
+  const handleSelectDatasetDoc = (doc: any) => {
+    const fileName = doc.data_source_detail_dict?.upload_file?.name || doc.name || '知识库文件';
+    const uploadFileId = doc.data_source_info?.upload_file_id || doc.id;
+    setUploadedFiles(prev => [...prev, { id: uploadFileId, name: fileName }]);
+    setShowDatasetModal(false);
+    setSelectedDatasetId(null);
+  };
 
   const handleVoiceInput = () => {
     if (isListening || shouldListenRef.current) {
@@ -1620,26 +1762,6 @@ const AppContent: React.FC = () => {
   ];
 
   return (
-    // <div className="flex flex-col h-screen w-full bg-white overflow-hidden font-sans relative" onClick={() => setActivePopup(null)}>
-
-    //   {/* Global Top Header */}
-    //   <div className="h-16 border-b border-gray-100 bg-white flex items-center px-[28px] flex-shrink-0 z-[60] justify-between">
-    //     <div className="font-bold text-[#1f2937] text-[18px] tracking-tight font-sans flex items-center">
-    //        <span>言复智能</span>
-    //     </div>
-
-    //     <div className="flex items-center space-x-4">
-    //       <button
-    //         onClick={(e) => { e.stopPropagation(); handleStartTour(); }}
-    //         className="group relative w-9 h-9 bg-white rounded-full shadow-sm flex items-center justify-center text-gray-400 hover:text-blue-600 hover:shadow-md transition-all duration-200 border border-gray-100"
-    //       >
-    //         <Icons.HelpCircle />
-    //         <div className="absolute top-full right-0 mt-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-    //           新手指引
-    //         </div>
-    //       </button>
-    //     </div>
-    //   </div>
     <div className="flex flex-col h-screen w-full overflow-hidden bg-white text-sm">
       {/* Global Header */}
       <header className="h-[64px] bg-white border-b border-gray-200 px-7 flex items-center justify-between z-9999 sticky top-0 shadow-sm">
@@ -1662,6 +1784,162 @@ const AppContent: React.FC = () => {
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
+        {/* Dataset Selection Modal */}
+        {showDatasetModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-fade-in" onClick={() => { setShowDatasetModal(false); setSelectedDatasetId(null); }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col h-[70vh] border border-gray-100" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {selectedDatasetId ? "选择知识库文件" : "选择知识库"}
+                </h3>
+                <button
+                  onClick={() => {
+                    if (selectedDatasetId) {
+                      setSelectedDatasetId(null);
+                    } else {
+                      setShowDatasetModal(false);
+                      setSelectedDatasetId(null);
+                    }
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  {selectedDatasetId ? <Icons.ArrowLeft className="w-5 h-5" /> : <Icons.X className="w-5 h-5" />}
+                </button>
+              </div>
+
+              <div className="px-6 py-3 border-b border-gray-100 bg-white shadow-sm z-10 relative">
+                 <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input 
+                      type="text"
+                      className="w-full pl-9 pr-4 py-2 border border-gray-200 bg-gray-50/50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
+                      placeholder={selectedDatasetId ? "搜索文件..." : "搜索知识库..."}
+                      value={selectedDatasetId ? docSearchQuery : datasetSearchQuery}
+                      onChange={(e) => selectedDatasetId ? setDocSearchQuery(e.target.value) : setDatasetSearchQuery(e.target.value)}
+                    />
+                 </div>
+              </div>
+
+              <div 
+                className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50/50"
+                onScroll={!selectedDatasetId ? handleDatasetsScroll : handleDocsScroll}
+              >
+                {!selectedDatasetId ? (
+                  isLoadingDatasets && datasets.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                      <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin"></div>
+                      <span>加载知识库...</span>
+                    </div>
+                  ) : datasets.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                      <BookOpen className="w-12 h-12 text-gray-300" />
+                      <span>暂无知识库</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {datasets.map(dataset => (
+                          <div
+                            key={dataset.id}
+                            onClick={() => handleSelectDataset(dataset.id)}
+                            className="bg-white border border-gray-200 hover:border-blue-300 hover:shadow-md p-4 rounded-xl cursor-pointer transition-all duration-200 group"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center space-x-3 truncate">
+                                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                                  <BookOpen className="w-5 h-5" />
+                                </div>
+                                <h4 className="font-medium text-gray-800 truncate">{dataset.name}</h4>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-4 mt-4 text-xs text-gray-500">
+                              <span className="flex items-center space-x-1">
+                                <Icons.File className="w-3.5 h-3.5" />
+                                <span>{dataset.document_count || 0} 个文档</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <Icons.Layout className="w-3.5 h-3.5" />
+                                <span>{dataset.word_count || 0} 字</span>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {isLoadingDatasets && datasets.length > 0 && (
+                        <div className="flex justify-center py-4">
+                          <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  isLoadingDocs ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                      <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin"></div>
+                      <span>加载文档...</span>
+                    </div>
+                  ) : datasetDocuments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                      <Icons.File className="w-12 h-12 text-gray-300" />
+                      <span>知识库暂无文档</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        {datasetDocuments.map(doc => {
+                          const fileName = doc.data_source_detail_dict?.upload_file?.name || doc.name || '未命名文档';
+                          const fileSize = doc.data_source_detail_dict?.upload_file?.size || 0;
+                          const extension = doc.data_source_detail_dict?.upload_file?.extension || fileName.split('.').pop()?.toLowerCase() || '';
+                          const fileType = extensionToFileType(extension);
+                          return (
+                            <div
+                              key={doc.id}
+                              onClick={() => handleSelectDatasetDoc(doc)}
+                              className="bg-white border border-gray-100 hover:border-blue-200 hover:bg-blue-50/50 p-3 rounded-xl cursor-pointer transition-colors flex items-center justify-between group"
+                            >
+                              <div className="flex items-center space-x-3 overflow-hidden">
+                                <div className="w-8 h-8 rounded bg-gray-50 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-50 transition-colors">
+                                    <FileTypeIcon type={fileType} size="md" />
+                                    {doc?.data_source_type === DataSourceType.NOTION &&
+                                        <NotionIcon type="page" src={doc?.data_source_info?.notion_page_icon} />
+                                    }
+                                    {(!doc?.data_source_type || doc?.data_source_type === DataSourceType.FILE) &&
+                                        <FileTypeIcon
+                                            type={extensionToFileType(doc?.data_source_info?.upload_file?.extension ?? extension)}
+                                            size="md"
+                                        />
+                                    }
+                                    {doc?.data_source_type === DataSourceType.WEB &&
+                                        <Globe01 className="w-4 h-4 text-purple-500" />
+                                    }
+                                </div>
+                                <div className="truncate">
+                                  <p className="text-sm font-medium text-gray-700 truncate">{fileName}</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">{(fileSize / 1024).toFixed(1)} KB • {doc.word_count || 0} 字</p>
+                                </div>
+                              </div>
+                              <button className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium px-3 py-1 rounded-md bg-white border border-blue-200 shadow-sm">
+                                选择
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {isLoadingDocs && datasetDocuments.length > 0 && (
+                        <div className="flex justify-center py-4">
+                          <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Token Prompt Modal */}
         {showTokenPrompt && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-fade-in">
@@ -1884,36 +2162,23 @@ const AppContent: React.FC = () => {
                         }}
                       />
                       {uploadedFiles.map((file) => {
-                        const ext =
-                          file.name.split(".").pop()?.toLowerCase() || "";
-                        let type = "文档";
-                        let bgColor = "bg-gray-500";
-                        let icon = (
-                          <Icons.File className="w-5 h-5 text-white" />
-                        );
-                        if (["xlsx", "xls", "csv"].includes(ext)) {
-                          type = "电子表格";
-                          bgColor = "bg-[#10a37f]";
-                          icon = <Icons.List className="w-5 h-5 text-white" />;
-                        } else if (ext === "pdf") {
-                          type = "PDF文档";
-                          bgColor = "bg-red-500";
-                          icon = (
-                            <Icons.FileText className="w-5 h-5 text-white" />
-                          );
-                        } else if (["doc", "docx"].includes(ext)) {
-                          type = "Word文档";
-                          bgColor = "bg-[#2563eb]";
-                          icon = (
-                            <Icons.FileText className="w-5 h-5 text-white" />
-                          );
-                        } else if (
-                          ["png", "jpg", "jpeg", "svg", "gif"].includes(ext)
-                        ) {
-                          type = "图片";
-                          bgColor = "bg-indigo-500";
-                          icon = <Icons.Image className="w-5 h-5 text-white" />;
-                        }
+                        const ext = file.name.split(".").pop()?.toLowerCase() || "";
+                        const fileType = extensionToFileType(ext);
+
+                        const FILE_TYPE_NAME_MAP: Record<string, string> = {
+                          pdf: "PDF文档",
+                          word: "Word文档",
+                          excel: "Excel表格",
+                          ppt: "PPT演示文稿",
+                          image: "图片",
+                          video: "视频",
+                          audio: "音频",
+                          markdown: "Markdown文档",
+                          code: "代码文件",
+                          document: "文本文档",
+                          gif: "GIF图片",
+                          custom: "文件",
+                        };
 
                         return (
                           <div
@@ -1921,10 +2186,8 @@ const AppContent: React.FC = () => {
                             className="relative flex items-center p-2.5 pr-8 bg-white border border-gray-200 rounded-xl shadow-sm group w-[220px] flex-shrink-0"
                           >
                             <div className="flex items-center space-x-3 w-full">
-                              <div
-                                className={`w-10 h-10 ${bgColor} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}
-                              >
-                                {icon}
+                              <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm">
+                                <FileTypeIcon type={fileType} size="lg" />
                               </div>
                               <div className="flex flex-col flex-1 overflow-hidden">
                                 <div
@@ -1934,7 +2197,7 @@ const AppContent: React.FC = () => {
                                   {file.name}
                                 </div>
                                 <div className="text-[11px] text-gray-500 mt-0.5">
-                                  {type}
+                                  {FILE_TYPE_NAME_MAP[fileType] || "文件"}
                                 </div>
                               </div>
                             </div>
@@ -2263,17 +2526,38 @@ const AppContent: React.FC = () => {
                   {/* Right Side Actions for Inline Layout */}
                   {!isInputExpanded && (
                     <div className="flex items-center justify-end space-x-2 flex-shrink-0 pr-3">
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading || isStreaming}
-                        className={`
-                         p-2 rounded-xl transition-all duration-300 leading-none
-                         ${isUploading ? "text-blue-500 animate-pulse" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}
-                     `}
-                        title="上传文件"
-                      >
-                        <Icons.Paperclip className="w-5 h-5" />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowFileSourceMenu(!showFileSourceMenu)}
+                          disabled={isUploading || isStreaming}
+                          className={`
+                           p-2 rounded-xl transition-all duration-300 leading-none
+                           ${isUploading ? "text-blue-500 animate-pulse" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}
+                       `}
+                          title="上传文件"
+                        >
+                          <Icons.Paperclip className="w-5 h-5" />
+                        </button>
+
+                        {showFileSourceMenu && (
+                          <div className="absolute bottom-full mb-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden text-[13px] font-medium text-gray-700">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); fileInputRef.current?.click(); }}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 flex items-center space-x-2 transition-colors"
+                            >
+                              <Icons.Paperclip className="w-4 h-4 text-gray-400" />
+                              <span>本地文件</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); setShowDatasetModal(true); loadDatasets(); }}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
+                            >
+                              <BookOpen className="w-4 h-4 text-gray-400" />
+                              <span>知识库文件</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
                       <button
                         onClick={handleVoiceInput}
@@ -2353,17 +2637,38 @@ const AppContent: React.FC = () => {
                   {/* Right Side: Action Icons & Send Button for Expanded Layout */}
                   {isInputExpanded && (
                     <div className="flex items-center justify-end space-x-2 flex-shrink-0 pr-1">
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading || isStreaming}
-                        className={`
-                           p-2 rounded-xl transition-all duration-300 leading-none
-                           ${isUploading ? "text-blue-500 animate-pulse" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}
-                       `}
-                        title="上传文件"
-                      >
-                        <Icons.Paperclip className="w-5 h-5" />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowFileSourceMenu(!showFileSourceMenu)}
+                          disabled={isUploading || isStreaming}
+                          className={`
+                             p-2 rounded-xl transition-all duration-300 leading-none
+                             ${isUploading ? "text-blue-500 animate-pulse" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}
+                         `}
+                          title="上传文件"
+                        >
+                          <Icons.Paperclip className="w-5 h-5" />
+                        </button>
+
+                        {showFileSourceMenu && (
+                          <div className="absolute bottom-full mb-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden text-[13px] font-medium text-gray-700">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); fileInputRef.current?.click(); }}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 flex items-center space-x-2 transition-colors"
+                            >
+                              <Icons.Paperclip className="w-4 h-4 text-gray-400" />
+                              <span>本地文件</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); setShowDatasetModal(true); loadDatasets(); }}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
+                            >
+                              <BookOpen className="w-4 h-4 text-gray-400" />
+                              <span>知识库文件</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
                       <button
                         onClick={handleVoiceInput}

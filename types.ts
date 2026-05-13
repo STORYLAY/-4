@@ -1,34 +1,21 @@
 import React from 'react';
 
-export enum Role {
-  USER = 'user',
-  MODEL = 'model'
-}
-
 export interface Message {
   id: string;
   role: Role;
   text: string;
   isStreaming?: boolean;
-  created_at?: string;
-  thought?: string;
-  answer?: string;
   logs?: LogEntry[];
-  files?: string[];
+  thought?: string;
   plan?: Plan;
+  files?: string[];
+  answer?: string;
+  created_at?: string;
 }
 
-export interface PlanStep {
-  index: number;
-  text: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  agent_name?: string;
-}
-
-export interface Plan {
-  plan_id: string;
-  title: string;
-  steps: PlanStep[];
+export enum Role {
+  USER = 'user',
+  MODEL = 'model'
 }
 
 export interface LogEntry {
@@ -37,12 +24,27 @@ export interface LogEntry {
   status?: 'success' | 'error';
   args?: any;
 }
+export type LogItem = LogEntry;
+
+export interface Plan {
+  plan_id: string;
+  title: string;
+  steps: PlanStep[];
+}
+
+export interface PlanStep {
+  index: number;
+  text: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  agent_name?: string;
+}
+export type Step = PlanStep;
 
 export interface HistoryItem {
   id: string;
   title: string;
   agent_type?: string;
-  created_at?: string;
+  created_at: string;
   updated_at?: string;
 }
 
@@ -68,11 +70,11 @@ export interface ConversationDetailApiResponse extends HistoryItem {
 export interface AppShortcut {
   id: string;
   name: string;
-  icon: React.ReactNode; // Changed from string to support SVG components
-  color: string;
   description?: string;
+  icon: React.ReactNode;
   iconUrl?: string;
   url?: string;
+  color: string;
   raw?: any;
 }
 
@@ -98,4 +100,12 @@ export interface WelcomeCard {
   description: string;
   icon: React.ReactNode;
   color: string;
+}
+
+export interface UploadedFile {
+  id: string;
+  name: string;
+  dataSourceType?: string;
+  extension?: string;
+  notionPageIcon?: any;
 }

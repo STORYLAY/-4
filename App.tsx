@@ -1448,6 +1448,7 @@ const AppContent: React.FC = () => {
             role: Role.USER,
             text: textContent,
             created_at: m.created_at,
+            files: m.files,
           });
 
           // Prepare a new assistant message for the subsequent items

@@ -8,7 +8,7 @@ export interface Message {
   logs?: LogEntry[];
   thought?: string;
   plan?: Plan;
-  files?: string[];
+  files?: any[];
   answer?: string;
   created_at?: string;
 }
@@ -64,6 +64,8 @@ export interface ConversationDetailApiResponse extends HistoryItem {
     message_type: string;
     metadata: any;
     created_at: string;
+    file_ids?: string[];
+    files?: any[];
   }[];
 }
 

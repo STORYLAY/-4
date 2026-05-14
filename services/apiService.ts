@@ -12,7 +12,8 @@ export class ApiError extends Error {
   }
 }
 
-const getHeaders = () => {
+export const getHeaders = () => {
+
   const token = localStorage.getItem('console_token') || '';
   return {
     'Content-Type': 'application/json',
@@ -251,6 +252,23 @@ export const getFileUrl = async (filePath: string): Promise<string> => {
 
   if (!response.ok) {
     throw new Error('Failed to fetch file');
+  }
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
+export const downloadUserFile = async (fileId: string): Promise<string> => {
+  const response = await fetch(`${BASE_URL}/console/api/files/${fileId}/download`, {
+    headers: getHeaders()
+  });
+
+  if (response.status === 401) {
+    throw new ApiError('Unauthorized', 401);
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to download file');
   }
 
   const blob = await response.blob();

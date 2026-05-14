@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Message, Role, Plan } from '../types';
 import { Icons } from '../constants';
 import ThoughtProcess from './ThoughtProcess';
-import { getFileUrl, ApiError, createAnalyProject } from '../services/apiService';
+import { getFileUrl, ApiError, createAnalyProject, downloadUserFile } from '../services/apiService';
 import { toast } from 'sonner';
 
 interface ChatMessageProps {
@@ -126,12 +126,12 @@ const FileAttachment: React.FC<{ filePath: string; onImageClick?: (url: string) 
            </div>
            
            {/* Download Overlay Button */}
-           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+           <div className="absolute top-2 right-2 opacity-80 group-hover:opacity-100 transition-opacity">
               <a 
                 href={url} 
                 download={fileName}
                 onClick={e => e.stopPropagation()}
-                className="p-2 bg-white/90 rounded-lg shadow-md hover:bg-white text-gray-700 transition-all hover:scale-110 pointer-events-auto"
+                className="p-2 bg-white/90 rounded-lg shadow-md hover:bg-white text-gray-700 transition-all hover:scale-110 pointer-events-auto flex items-center justify-center backdrop-blur-sm"
                 title="下载图片"
               >
                 <Icons.Download className="w-4 h-4" />
@@ -183,6 +183,142 @@ const FileAttachment: React.FC<{ filePath: string; onImageClick?: (url: string) 
               <Icons.Database className="w-4 h-4" />
               导入数据分析
             </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const UserFileAttachment: React.FC<{ file: any; onImageClick?: (url: string) => void }> = ({ file, onImageClick }) => {
+  const isImage = file.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name || '');
+  const url = file.preview_url || file.url || file.download_url;
+  const downloadUrl = file.download_url || url;
+  const canDownload = !!(downloadUrl || file.id);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!canDownload || downloading) return;
+    
+    // If there's a direct download URL from the API, just use it
+    if (file.download_url) {
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = file.download_url;
+      a.download = file.name || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    
+    try {
+      setDownloading(true);
+      let fetchUrl = url;
+      let isBlobObjectUrl = false;
+
+      // If we don't have a direct URL but we have a file ID, fetch via API
+      if (!fetchUrl && file.id) {
+        fetchUrl = await downloadUserFile(file.id);
+        isBlobObjectUrl = true;
+      }
+      
+      if (!fetchUrl) throw new Error("No download URL available");
+
+      // For standard browser URLs, we can fetch to get a blob for forced download
+      // If it's already a blob ObjectURL (from downloadUserFile), we can just download it directly
+      let blobUrl = fetchUrl;
+      if (!isBlobObjectUrl) {
+        const res = await fetch(fetchUrl);
+        const blob = await res.blob();
+        blobUrl = window.URL.createObjectURL(blob);
+        isBlobObjectUrl = true;
+      }
+
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = file.name || 'download';
+      document.body.appendChild(a);
+      a.click();
+      
+      if (isBlobObjectUrl) {
+        // small timeout to ensure browser starts download before revoking
+        setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
+      }
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download failed:', err);
+      // Fallback to normal download mechanism if available
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank');
+      } else {
+        toast.error('下载失败，请稍后重试');
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (isImage && url) {
+    return (
+      <div className="mt-2 mb-2">
+        <div className="relative group rounded-lg overflow-hidden border border-white/20 bg-black/10 max-w-sm cursor-zoom-in">
+           <img 
+             src={url} 
+             alt={file.name || 'Image'} 
+             className="w-full h-auto max-h-64 object-contain transition-transform duration-300 group-hover:scale-105" 
+             onClick={() => onImageClick?.(url)}
+           />
+           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+              <div className="p-2 bg-white/90 rounded-full shadow-lg text-gray-700 flex items-center space-x-1 px-3">
+                <Icons.Maximize className="w-4 h-4" />
+                <span className="text-xs font-medium">点击预览</span>
+              </div>
+           </div>
+           
+           <div className="absolute top-2 right-2 opacity-80 group-hover:opacity-100 transition-opacity">
+              <button 
+                onClick={handleDownload}
+                disabled={downloading}
+                className="p-1.5 bg-white/90 rounded-lg shadow-md hover:bg-white text-gray-700 transition-all hover:scale-110 pointer-events-auto disabled:opacity-50 flex items-center justify-center backdrop-blur-sm"
+                title="下载图片"
+              >
+                {downloading ? (
+                  <span className="w-4 h-4 border-2 border-gray-700 border-t-transparent rounded-full animate-spin inline-block mr-1 align-middle"></span>
+                ) : (
+                  <Icons.Download className="w-4 h-4 inline-block align-middle" />
+                )}
+              </button>
+           </div>
+        </div>
+        <div className="text-xs text-white/70 mt-1 truncate max-w-sm">{file.name}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center space-x-3 p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all group max-w-sm mt-2">
+      <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-white flex-shrink-0">
+        <Icons.File className="w-5 h-5" />
+      </div>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="text-sm font-medium text-white truncate">{file.name}</span>
+        {file.size && <span className="text-xs text-white/70">{(file.size / 1024).toFixed(1)} KB</span>}
+      </div>
+      {canDownload && (
+        <button 
+          onClick={handleDownload}
+          disabled={downloading}
+          className="p-2 text-white/70 hover:text-white rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+          title="下载文件"
+        >
+          {downloading ? (
+            <span className="w-4 h-4 border-2 border-white/70 border-t-transparent rounded-full animate-spin inline-block align-middle"></span>
+          ) : (
+            <Icons.Download className="w-4 h-4 inline-block align-middle" />
           )}
         </button>
       )}
@@ -333,8 +469,19 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onRegenerate, onImag
               : 'bg-white border border-gray-100 rounded-tl-sm shadow-[0_2px_8px_rgba(0,0,0,0.02)] w-full' // Clean white look for model
           }`}>
             {isUser ? (
-              <div className="whitespace-pre-wrap break-words text-[15px] leading-relaxed tracking-wide">
+              <div className="whitespace-pre-wrap break-words text-[15px] leading-relaxed tracking-wide w-full">
                 {message.text}
+                {message.files && message.files.length > 0 && (
+                  <div className={`grid grid-cols-1 gap-2 ${message.text ? 'mt-3 border-t border-white/20 pt-3' : ''}`}>
+                    {message.files.map((file, index) => (
+                      typeof file === 'object' ? (
+                        <UserFileAttachment key={index} file={file} onImageClick={onImageClick} />
+                      ) : (
+                        <FileAttachment key={index} filePath={file} onImageClick={onImageClick} />
+                      )
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="markdown-body">

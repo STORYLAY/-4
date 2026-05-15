@@ -678,7 +678,6 @@ const AppContent: React.FC = () => {
     setSelectedDatasetId(datasetId);
     setDatasetDocuments([]);
     setDocSearchQuery("");
-    loadDatasetDocs(datasetId, 1, false, "");
   };
 
   const handleSelectDatasetDoc = (doc: any) => {
@@ -2550,7 +2549,7 @@ const AppContent: React.FC = () => {
                               <span>本地文件</span>
                             </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); setShowDatasetModal(true); loadDatasets(); }}
+                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); setShowDatasetModal(true); }}
                               className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
                             >
                               <BookOpen className="w-4 h-4 text-gray-400" />
@@ -2661,7 +2660,7 @@ const AppContent: React.FC = () => {
                               <span>本地文件</span>
                             </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); setShowDatasetModal(true); loadDatasets(); }}
+                              onClick={(e) => { e.stopPropagation(); setShowFileSourceMenu(false); setShowDatasetModal(true); }}
                               className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center space-x-2 transition-colors"
                             >
                               <BookOpen className="w-4 h-4 text-gray-400" />
